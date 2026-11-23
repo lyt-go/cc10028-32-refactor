@@ -1,6 +1,10 @@
 """文档版本服务：文档重新解析后的版本快照、变更摘要与抽取产物数量登记。
 
 从解析产物和分块产物读取并生成版本快照，记录变更摘要和产物统计数据。
+
+产物读取不再自行拼路径，而是消费与抽取血缘共享的文档产物定位结果
+（app.services.doc_artifacts），只统计定位时经存在性确认的同一来源组产物；
+快照计数口径、找不到产物时的空统计语义与持久化接口保持不变。
 """
 from __future__ import annotations
 
@@ -23,27 +27,21 @@ class DocVersionService(BaseModuleService):
 
     def create_snapshot(self, doc_id: str, version: str = "v1.0") -> dict[str, Any]:
         """为指定文档创建版本快照，汇总解析、分块和实体抽取的统计信息。"""
-        # 读取解析产物
-        parsed_file = self._data_dir("parsed") / f"{doc_id}_parsed.jsonl"
-        parsed = self._read_jsonl(parsed_file)
+        # 共享定位：一次性识别该文档整个来源组的产物，仅读取确认存在的同组文件
+        group = self._locate_doc_artifacts(doc_id)
 
-# 数据操作：归档版本快照数据记录抽取产物的统计数据
-        # 读取分块产物
-        chunks_file = self._data_dir("chunks") / f"{doc_id}_parsed_chunks.jsonl"
-        chunks = self._read_jsonl(chunks_file)
-
-        # 读取实体产物
-        entity_file = self._data_dir("entities") / f"{doc_id}_parsed_entities.jsonl"
-        entities = self._read_jsonl(entity_file)
-
-        # 读取图谱产物
-        graph_file = self._data_dir("graph") / f"{doc_id}_parsed_graph.jsonl"
-        graph = self._read_jsonl(graph_file)
+        parsed = group.read("parsed", self._read_jsonl)
+        chunks = group.read("chunks", self._read_jsonl)
+        entities = group.read("entities", self._read_jsonl)
+        graph = group.read("graph", self._read_jsonl)
 
         pages_count = len(parsed)
         chunk_count = len(chunks)
         entity_count = len(entities)
         triple_count = len(graph)
+
+        # 说明本次快照核验的是文档的哪组页、分块和关系
+        scope = group.describe_scope(self._read_jsonl)
 
         # 计算变更摘要
         previous_snapshots = sorted(
@@ -90,6 +88,8 @@ class DocVersionService(BaseModuleService):
             "entities": entity_count,
             "triples": triple_count,
             "change_summary": change_summary,
+            "artifact_group": group.as_dict(),
+            "scope": scope,
         })
 
         # 跨模块触发：结果交付
@@ -105,6 +105,8 @@ class DocVersionService(BaseModuleService):
             "chunks": chunk_count,
             "entities": entity_count,
             "triples": triple_count,
+            "artifact_group": group.as_dict(),
+            "scope": scope,
             "triggers": triggers,
         }
 

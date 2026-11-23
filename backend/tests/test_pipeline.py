@@ -316,6 +316,10 @@ class TestParseRetry:
             "重采范围": "DOC-X", "恢复游标": "0", "重采结果": "", "status": "待重采",
         }
         tf = DATA_ROOT / "retries" / f"{batch_key}_retries.jsonl"
+        cp = DATA_ROOT / "checkpoints" / "retry_RETRY-00099.json"
+        # 固定重采编号的检查点会跨运行累积，先清理保证测试可重复
+        if cp.exists():
+            cp.unlink()
         svc._write_jsonl(tf, [task])
         result = svc.execute_retry("RETRY-00099")
         assert result.get("status") != "已放弃", f"不应放弃: {result}"

@@ -199,6 +199,13 @@ class BaseModuleService:
         """子类覆盖为True以声明支持自动触发下游模块。"""
         return False
 
+    # -- 共享文档产物定位 --
+
+    def _locate_doc_artifacts(self, source_key: str):
+        """获取文档版本与抽取血缘共享的文档产物定位结果（整个来源组一次性识别）。"""
+        from app.services.doc_artifacts import locate_doc_artifacts
+        return locate_doc_artifacts(source_key)
+
     # -- 本域专用跨模块触发方法 --
 
     def _trigger_format_parse(self, batch_id: str) -> dict[str, Any]:
